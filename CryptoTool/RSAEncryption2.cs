@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using Microsoft.Win32;
 using System.Security.Principal;
 
-namespace ECOCustomActions
+namespace CryptoTool
 {
     class RSAEncryption
     {
@@ -21,7 +21,7 @@ namespace ECOCustomActions
             return keys;
         }
 
-        public void WriteKeysToRegistryLocation(string RegistryLocation)
+        public void WriteNewKeysToRegistryLocation(string RegistryLocation)
         {
             try
             {
@@ -30,7 +30,7 @@ namespace ECOCustomActions
                     Console.WriteLine("Writing keys to registry...");
                     Registry.LocalMachine.CreateSubKey(RegistryLocation);
                     RegistryKey regKey = Registry.LocalMachine.OpenSubKey(RegistryLocation, true);
-                
+
                     String rsaKeys = GenerateRSAKeys();
                     regKey.SetValue("RSA_KEY", rsaKeys, RegistryValueKind.String);
                     regKey.Close();
@@ -47,21 +47,19 @@ namespace ECOCustomActions
             }
         }
 
-        public void WriteEncryptedPasswordToRegistry(string RegistryLocation)
+        public void WriteExistingKeysToRegistry(string RSAKeys, string RegistryLocation)
         {
             try
             {
                 if (IsAdmin())
                 {
-                    Console.WriteLine("Writing cipherText to registry...");
+                    Console.WriteLine("Writing RSA Keys to registry...");
                     if (!DoesKeyExist(RegistryLocation))
                     {
                         Registry.LocalMachine.CreateSubKey(RegistryLocation);
                     }
                     RegistryKey regKey = Registry.LocalMachine.OpenSubKey(RegistryLocation, true);
-
-                    String rsaKeys = GenerateRSAKeys();
-                    regKey.SetValue("RSA_PASS", rsaKeys, RegistryValueKind.String);
+                    regKey.SetValue("RSA_KEY", RSAKeys, RegistryValueKind.String);
                     regKey.Close();
                 }
                 else
@@ -76,13 +74,40 @@ namespace ECOCustomActions
             }
         }
 
-        public string ReadKeysFromRegistry(string RegistryLocation)
+        public void WriteExistingCipherTextToRegistry(byte[] CipherTextFile, string RegistryLocation)
+        {
+            try
+            {
+                if (IsAdmin())
+                {
+                    Console.WriteLine("Writing cipherText to registry...");
+                    if (!DoesKeyExist(RegistryLocation))
+                    {
+                        Registry.LocalMachine.CreateSubKey(RegistryLocation);
+                    }
+                    RegistryKey regKey = Registry.LocalMachine.OpenSubKey(RegistryLocation, true);
+                    regKey.SetValue("RSA_PASS", CipherTextFile);
+                    regKey.Close();
+                }
+                else
+                {
+                    Console.WriteLine("Permission Denied. You must run as administrator.");
+                    Console.ReadLine();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+        }
+
+        public string ReadKeysFromRegistry(string KeyName, string RegistryLocation)
         {
             string rsaKeys = string.Empty;
             try
             {
                 RegistryKey regKey = Registry.LocalMachine.OpenSubKey(RegistryLocation, false);
-                rsaKeys = regKey.GetValue("RSA_KEY") as string;
+                rsaKeys = regKey.GetValue(KeyName) as string;
             }
             catch (Exception ex)
             {
@@ -91,13 +116,30 @@ namespace ECOCustomActions
             return rsaKeys;
         }
 
+        public byte[] ReadCipherTextFromRegistry(string KeyName, string RegistryLocation)
+        {
+            byte[] cipherText = new byte[] {};
+            try
+            {
+                RegistryKey regKey = Registry.LocalMachine.OpenSubKey(RegistryLocation, false);
+                cipherText = regKey.GetValue(KeyName) as byte[];
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+            return cipherText;
+        }
+
+
+
         public byte[] EncryptPassword(string password, string RegistryLocation)
         {
             byte[] encryptedData = new byte[] { };
             try
             {
                 UnicodeEncoding ByteConverter = new UnicodeEncoding();
-                string rsaKeys = ReadKeysFromRegistry(RegistryLocation);
+                string rsaKeys = ReadKeysFromRegistry("RSA_KEY", RegistryLocation);
                 using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
                 {
                     byte[] passToByte = ByteConverter.GetBytes(password);
@@ -118,7 +160,7 @@ namespace ECOCustomActions
             try
             {
                 UnicodeEncoding ByteConverter = new UnicodeEncoding();
-                string rsaKeys = ReadKeysFromRegistry(RegistryLocation);
+                string rsaKeys = ReadKeysFromRegistry("RSA_KEY", RegistryLocation);
                 using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
                 {
                     rsa.FromXmlString(rsaKeys);
@@ -181,8 +223,7 @@ namespace ECOCustomActions
             try
             {
                 RegistryKey regKey = Registry.LocalMachine.OpenSubKey(RegistryLocation, false);
-                object value = regKey.GetValue(null);
-                if (value != null)
+                if (regKey != null)
                 {
                     keyExists = true;
                 }
